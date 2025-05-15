@@ -1,0 +1,5 @@
+python-chess==1.999
+pygame==2.6.1
+numpy==1.24.3
+pytest==7.4.3
+PyQt5==5.15.9 
