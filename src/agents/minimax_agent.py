@@ -227,7 +227,7 @@ class MinimaxAgent(BaseAgent):
         move_scores = []
         killer_set = set(self.killer_moves[depth]) if depth < len(self.killer_moves) else set()
 
-        # Tạo danh sách các nước đi theo loại
+        # First, separate moves into categories
         captures = []
         checks = []
         normal_moves = []
@@ -238,7 +238,7 @@ class MinimaxAgent(BaseAgent):
             if piece is None:
                 continue
 
-            # Phân loại nước đi
+            # Categorize moves
             if board.is_capture(move):
                 captures.append(move)
             else:
@@ -249,7 +249,7 @@ class MinimaxAgent(BaseAgent):
                     normal_moves.append(move)
                 board.pop()
 
-        # Sắp xếp captures theo MVV-LVA
+        # Score and sort captures using MVV-LVA
         for move in captures:
             score = 0
             piece = board.piece_at(move.from_square)
@@ -263,25 +263,34 @@ class MinimaxAgent(BaseAgent):
                 victim_value = 0
             
             attacker_value = PIECE_VALUES[piece.piece_type]
-            # Tăng độ ưu tiên cho captures
-            score = 200000 + victim_value - (attacker_value / 10)
-            move_scores.append((score, move))
-
-        # Sắp xếp checks
-        for move in checks:
-            score = 100000
-            # Thêm điểm cho checks có thể gây thiệt hại
+            # MVV-LVA scoring: Most Valuable Victim - Least Valuable Attacker
+            score = 100000 + victim_value * 10 - attacker_value
+            
+            # Check if capture is safe
             board.push(move)
             if board.is_check():
-                # Kiểm tra xem có thể bắt quân sau khi chiếu không
-                for reply in board.legal_moves:
-                    if board.is_capture(reply):
-                        score += 50000
-                        break
+                score -= 50000  # Penalize unsafe captures
             board.pop()
+            
             move_scores.append((score, move))
 
-        # Sắp xếp normal moves
+        # Score and sort checks
+        for move in checks:
+            score = 80000  # Base score for checks
+            piece = board.piece_at(move.from_square)
+            
+            # Add piece value to score
+            score += PIECE_VALUES[piece.piece_type]
+            
+            # Check if move is safe
+            board.push(move)
+            if board.is_attacked_by(not board.turn, move.to_square):
+                score -= 50000  # Penalize unsafe checks
+            board.pop()
+            
+            move_scores.append((score, move))
+
+        # Score and sort normal moves
         for move in normal_moves:
             score = 0
             move_key = (move.from_square, move.to_square, move.promotion)
@@ -289,7 +298,7 @@ class MinimaxAgent(BaseAgent):
 
             # Killer moves
             if move in killer_set:
-                score += 80000
+                score += 70000
 
             # History heuristic
             score += self.history_heuristic.get(move_key, 0)
@@ -307,7 +316,7 @@ class MinimaxAgent(BaseAgent):
                 if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
                     score += 1600
                 if (piece.color == chess.WHITE and chess.square_rank(move.from_square) == 0) or \
-                     (piece.color == chess.BLACK and chess.square_rank(move.from_square) == 7):
+                   (piece.color == chess.BLACK and chess.square_rank(move.from_square) == 7):
                     score += 1200
 
             # Castling
@@ -316,7 +325,7 @@ class MinimaxAgent(BaseAgent):
 
             move_scores.append((score, move))
         
-        # Sắp xếp tất cả nước đi theo điểm số
+        # Sort all moves by score
         move_scores.sort(key=lambda x: x[0], reverse=True)
         return [move for _, move in move_scores]
     
