@@ -1,26 +1,26 @@
 import pygame
 import chess
 import os
+from .config import *
 
 class BoardUI:
-    def __init__(self, width=800, height=800):
+    def __init__(self, screen, width=800, height=800):
         """Khởi tạo giao diện bàn cờ.
         
         Args:
+            screen: pygame.Surface object để vẽ lên
             width: Chiều rộng cửa sổ
             height: Chiều cao cửa sổ
         """
-        pygame.init()
+        self.screen = screen
         self.width = width
         self.height = height
         self.square_size = min(width, height) // 8
-        self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Chess Game")
         
         # Màu gỗ cho bàn cờ
-        self.WHITE = (240, 217, 181)  # Gỗ nhạt
-        self.BLACK = (181, 136, 99)   # Gỗ đậm
-        self.HIGHLIGHT = (124, 252, 0, 128)  # Màu xanh lá nhạt cho highlight
+        self.WHITE = COLORS['light_square']
+        self.BLACK = COLORS['dark_square']
+        self.HIGHLIGHT = COLORS['highlight']
         
         # Dùng font DejaVuSans.ttf với kích thước nhỏ hơn để quân cờ không bị tràn ô
         font_path = os.path.join(os.path.dirname(__file__), 'DejaVuSans.ttf')

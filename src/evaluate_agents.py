@@ -1,61 +1,62 @@
 import chess
 import time
-from .agents.random_agent import RandomAgent
-from .agents.minimax_agent import MinimaxAgent
-from .agents.alphabeta_agent import AlphaBetaAgent
-from .agents.mcts_agent import MCTSAgent
+from src.agents.random_agent import RandomAgent
+from src.agents.minimax_agent import MinimaxAgent
+from src.agents.alphabeta_agent import AlphaBetaAgent
+from src.agents.mcts_agent import MCTSAgent
+from multiprocessing import Pool, cpu_count
+
+def evaluate_single_game(args):
+    """Evaluate a single game between two agents"""
+    agent, opponent, color = args
+    board = chess.Board()
+    start_time = time.time()
+    
+    while not board.is_game_over():
+        if board.turn == color:
+            move = agent.get_move(board)
+        else:
+            move = opponent.get_move(board)
+        board.push(move)
+    
+    game_time = time.time() - start_time
+    result = board.outcome().result()
+    
+    if color == chess.WHITE:
+        if result == "1-0":
+            return (1, 0, 0, game_time)  # win
+        elif result == "1/2-1/2":
+            return (0, 1, 0, game_time)  # draw
+        else:
+            return (0, 0, 1, game_time)  # loss
+    else:
+        if result == "0-1":
+            return (1, 0, 0, game_time)  # win
+        elif result == "1/2-1/2":
+            return (0, 1, 0, game_time)  # draw
+        else:
+            return (0, 0, 1, game_time)  # loss
 
 def evaluate_agent_strength(agent, num_games=20, opponent=None):
-    """Evaluate agent strength against a given opponent or random agent"""
+    """Evaluate agent strength against a given opponent or random agent using parallel processing"""
     if opponent is None:
         opponent = RandomAgent(chess.WHITE)
     
-    wins = 0
-    draws = 0
-    losses = 0
-    total_time = 0
-    
-    # Play as white
+    # Create game arguments for parallel processing
+    game_args = []
     for _ in range(num_games // 2):
-        board = chess.Board()
-        start_time = time.time()
-        
-        while not board.is_game_over():
-            if board.turn == chess.WHITE:
-                move = agent.get_move(board)
-            else:
-                move = opponent.get_move(board)
-            board.push(move)
-        
-        total_time += time.time() - start_time
-        result = board.outcome().result()
-        if result == "1-0":
-            wins += 1
-        elif result == "1/2-1/2":
-            draws += 1
-        else:
-            losses += 1
+        game_args.append((agent, opponent, chess.WHITE))
+        game_args.append((agent, opponent, chess.BLACK))
     
-    # Play as black
-    for _ in range(num_games // 2):
-        board = chess.Board()
-        start_time = time.time()
-        
-        while not board.is_game_over():
-            if board.turn == chess.BLACK:
-                move = agent.get_move(board)
-            else:
-                move = opponent.get_move(board)
-            board.push(move)
-        
-        total_time += time.time() - start_time
-        result = board.outcome().result()
-        if result == "0-1":
-            wins += 1
-        elif result == "1/2-1/2":
-            draws += 1
-        else:
-            losses += 1
+    # Use parallel processing to evaluate games
+    with Pool(processes=cpu_count()) as pool:
+        results = pool.map(evaluate_single_game, game_args)
+    
+    # Aggregate results
+    wins = sum(r[0] for r in results)
+    draws = sum(r[1] for r in results)
+    losses = sum(r[2] for r in results)
+    total_time = sum(r[3] for r in results)
     
     # Calculate rating (0-10 scale)
     win_rate = wins / num_games

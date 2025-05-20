@@ -10,4 +10,11 @@ __all__ = [
     'MinimaxAgent',
     'AlphaBetaAgent',
     'MCTSAgent'
-] 
+]
+
+# Try to import DeepLearningAgent, but don't fail if it's not available
+try:
+    from .deep_learning_agent import DeepLearningAgent
+    __all__.append('DeepLearningAgent')
+except ImportError:
+    pass 

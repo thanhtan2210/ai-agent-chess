@@ -1,8 +1,8 @@
 import chess
 import time
 from typing import Optional, Dict, Tuple
-from ..game.rules import evaluate_position, PIECE_VALUES
-from .base_agent import BaseAgent
+from src.game.rules import evaluate_position, PIECE_VALUES
+from src.agents.base_agent import BaseAgent
 
 DEBUG_LOG = True # Set to False to disable logs
 # DEBUG_LOG = False # Temporarily disable for cleaner test runs if needed, enable for debugging
@@ -40,8 +40,8 @@ class TranspositionTable:
         self.entries = len(self.table) # Correctly update entries count
 
 class MinimaxAgent(BaseAgent):
-    def __init__(self, color, max_depth=4, time_limit=5.0):
-        """Initialize the Minimax agent with alpha-beta pruning.
+    def __init__(self, color, max_depth=3, time_limit=5.0):
+        """Initialize the Minimax agent.
         
         Args:
             color: chess.WHITE or chess.BLACK
@@ -51,60 +51,50 @@ class MinimaxAgent(BaseAgent):
         super().__init__(color)
         self.max_depth = max_depth
         self.time_limit = time_limit
-        self.transposition_table = TranspositionTable()
-        self.nodes_evaluated = 0
         self.start_time = 0
-        self.killer_moves = [[] for _ in range(self.max_depth + 1)]  # Killer moves for each depth
-        self.history_heuristic = {}  # Lưu số lần mỗi nước đi dẫn đến cutoff
+        self.nodes_evaluated = 0
+        self.transposition_table = TranspositionTable()
+        self.killer_moves = [[] for _ in range(max_depth + 1)]  # Killer moves for each depth
+        self.history_heuristic = {}  # History heuristic table
         self.move_cache = {}  # Cache for move scores
         self.name = "Minimax"
         if DEBUG_LOG: print(f"MinimaxAgent initialized. Max Depth: {max_depth}, Time Limit: {time_limit}")
     
     def get_move(self, board):
-        """Get the best move using iterative deepening minimax with alpha-beta pruning.
-        
-        Args:
-            board: chess.Board object representing the current position
-            
-        Returns:
-            chess.Move: The best move found
-        """
-        self.nodes_evaluated = 0
+        """Get the best move using iterative deepening minimax with alpha-beta pruning."""
         self.start_time = time.time()
-        self.move_cache.clear() # Clear move ordering cache for each new get_move call
-        if DEBUG_LOG: print(f"\\n--- Minimax Get Move Called --- FEN: {board.fen()}")
-
-        best_move_overall = None
+        self.nodes_evaluated = 0
+        self.move_cache.clear()  # Clear move cache for new position
+        
+        if DEBUG_LOG: print(f"\n--- Minimax Get Move Called --- FEN: {board.fen()}")
+        
+        best_move = None
         best_eval_overall = float('-inf')
-
-        for current_depth_iterative in range(1, self.max_depth + 1):
-            if DEBUG_LOG: print(f"Iterative Deepening - Current Depth: {current_depth_iterative}")
-            # Reset killer moves for each new depth in iterative deepening if they are depth-specific
-            # self.killer_moves = [[] for _ in range(current_depth_iterative + 1)] # Or handle max_depth correctly
+        alpha = float('-inf')
+        beta = float('inf')
+        
+        # Iterative deepening
+        for depth in range(1, self.max_depth + 1):
+            if DEBUG_LOG: print(f"Iterative Deepening - Current Depth: {depth}")
             
-            eval_at_depth, move_at_depth = self._minimax(board, current_depth_iterative, float('-inf'), float('inf'), True)
+            eval_score, move = self._minimax(board, depth, alpha, beta, True)
             
-            if time.time() - self.start_time > self.time_limit and current_depth_iterative < self.max_depth :
-                if DEBUG_LOG: print(f"Time limit reached during iterative deepening at depth {current_depth_iterative}. Using best move from previous depth.")
-                break # Use results from previous depth if time is up
+            if time.time() - self.start_time > self.time_limit:
+                break
+                
+            if move is not None:
+                best_move = move
+                best_eval_overall = eval_score
+        
+        if best_move is None and list(board.legal_moves):
+            if DEBUG_LOG: print("No best move found by minimax, selecting first legal move.")
+            best_move = list(board.legal_moves)[0]
+        elif best_move is None:
+            if DEBUG_LOG: print("No best move found and no legal moves.")
+            return None
 
-            if move_at_depth is not None: # Check if a move was actually found
-                 best_eval_overall = eval_at_depth
-                 best_move_overall = move_at_depth
-            elif DEBUG_LOG:
-                 print(f"No move found at depth {current_depth_iterative}. Eval: {eval_at_depth}")
-
-
-        final_move = best_move_overall
-        if final_move is None and list(board.legal_moves):
-            if DEBUG_LOG: print("No best move found by minimax (possibly due to immediate time out or no moves explored), selecting first legal move.")
-            final_move = list(board.legal_moves)[0]
-        elif final_move is None:
-            if DEBUG_LOG: print("No best move found and no legal moves. This should not happen if game is not over.")
-            return None # Or raise error
-
-        if DEBUG_LOG: print(f"Minimax selected move: {final_move} with eval: {best_eval_overall} from FEN: {board.fen()}")
-        return final_move
+        if DEBUG_LOG: print(f"Minimax selected move: {best_move} with eval: {best_eval_overall} from FEN: {board.fen()}")
+        return best_move
     
     def _minimax(self, board, depth, alpha, beta, maximizing_player):
         """Minimax algorithm with alpha-beta pruning.
@@ -237,77 +227,96 @@ class MinimaxAgent(BaseAgent):
         move_scores = []
         killer_set = set(self.killer_moves[depth]) if depth < len(self.killer_moves) else set()
 
+        # Tạo danh sách các nước đi theo loại
+        captures = []
+        checks = []
+        normal_moves = []
+        
         for move in moves:
             move_key = (move.from_square, move.to_square, move.promotion)
-            if move_key in self.move_cache:
-                score = self.move_cache[move_key]
+            piece = board.piece_at(move.from_square)
+            if piece is None:
+                continue
+
+            # Phân loại nước đi
+            if board.is_capture(move):
+                captures.append(move)
             else:
-                score = 0
-                piece = board.piece_at(move.from_square)
-                if piece is None: # Should not happen for legal moves
-                    continue
-
-                # Killer moves
-                if move in killer_set:
-                    score += 20000 # Highest priority
-
-                # Captures (MVV-LVA)
-                if board.is_capture(move):
-                    victim = board.piece_at(move.to_square)
-                    if board.is_en_passant(move):
-                        victim_value = PIECE_VALUES[chess.PAWN]
-                    elif victim:
-                        victim_value = PIECE_VALUES[victim.piece_type]
-                    else:
-                        victim_value = 0
-                    
-                    attacker_value = PIECE_VALUES[piece.piece_type]
-                    # Refined MVV-LVA: Prioritize valuable victims, less valuable attackers
-                    score += 15000 + victim_value - (attacker_value / 10) 
-                
-                # Checks - make sure this has high priority but less than killer captures and good captures
                 board.push(move)
                 if board.is_check():
-                    score += 5000
-                board.pop() # Important to pop after push
+                    checks.append(move)
+                else:
+                    normal_moves.append(move)
+                board.pop()
 
-                # History heuristic - apply after specific tactical moves like captures/checks
-                score += self.history_heuristic.get(move_key, 0) # Max value could be max_depth^2
+        # Sắp xếp captures theo MVV-LVA
+        for move in captures:
+            score = 0
+            piece = board.piece_at(move.from_square)
+            victim = board.piece_at(move.to_square)
+            
+            if board.is_en_passant(move):
+                victim_value = PIECE_VALUES[chess.PAWN]
+            elif victim:
+                victim_value = PIECE_VALUES[victim.piece_type]
+            else:
+                victim_value = 0
+            
+            attacker_value = PIECE_VALUES[piece.piece_type]
+            # Tăng độ ưu tiên cho captures
+            score = 200000 + victim_value - (attacker_value / 10)
+            move_scores.append((score, move))
 
-                # Pawn pushes to center/advanced ranks
-                if piece.piece_type == chess.PAWN:
-                    if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
-                        score += 100
-                    if (piece.color == chess.WHITE and chess.square_rank(move.to_square) == 6) or \
-                       (piece.color == chess.BLACK and chess.square_rank(move.to_square) == 1):
-                        score += 200 # Pawn promotion imminent
+        # Sắp xếp checks
+        for move in checks:
+            score = 100000
+            # Thêm điểm cho checks có thể gây thiệt hại
+            board.push(move)
+            if board.is_check():
+                # Kiểm tra xem có thể bắt quân sau khi chiếu không
+                for reply in board.legal_moves:
+                    if board.is_capture(reply):
+                        score += 50000
+                        break
+            board.pop()
+            move_scores.append((score, move))
 
-                # Piece development
-                if piece.piece_type in [chess.KNIGHT, chess.BISHOP]:
-                    if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
-                        score += 50
-                    # Penalty for moving already developed piece back to back rank (heuristic)
-                    if (piece.color == chess.WHITE and chess.square_rank(move.from_square) > 0 and chess.square_rank(move.to_square) == 0) or \
-                       (piece.color == chess.BLACK and chess.square_rank(move.from_square) < 7 and chess.square_rank(move.to_square) == 7):
-                        score -= 30
-                    elif (piece.color == chess.WHITE and chess.square_rank(move.from_square) == 0) or \
-                         (piece.color == chess.BLACK and chess.square_rank(move.from_square) == 7):
-                        score += 30 # Bonus for moving from back rank
+        # Sắp xếp normal moves
+        for move in normal_moves:
+            score = 0
+            move_key = (move.from_square, move.to_square, move.promotion)
+            piece = board.piece_at(move.from_square)
 
-                # Castling
-                if board.is_castling(move):
-                    score += 1500
-                
-                # Safety check (moving to an unattacked square)
-                # This is complex; for now, rely on q-search to handle safety of captures
-                # board.push(move)
-                # if not board.is_attacked_by(not piece.color, move.to_square):
-                #     score += 20
-                # board.pop()
+            # Killer moves
+            if move in killer_set:
+                score += 80000
 
-                self.move_cache[move_key] = score
+            # History heuristic
+            score += self.history_heuristic.get(move_key, 0)
+
+            # Pawn pushes to center/advanced ranks
+            if piece.piece_type == chess.PAWN:
+                if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
+                    score += 2000
+                if (piece.color == chess.WHITE and chess.square_rank(move.to_square) == 6) or \
+                   (piece.color == chess.BLACK and chess.square_rank(move.to_square) == 1):
+                    score += 4000
+
+            # Piece development
+            if piece.piece_type in [chess.KNIGHT, chess.BISHOP]:
+                if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
+                    score += 1600
+                if (piece.color == chess.WHITE and chess.square_rank(move.from_square) == 0) or \
+                     (piece.color == chess.BLACK and chess.square_rank(move.from_square) == 7):
+                    score += 1200
+
+            # Castling
+            if board.is_castling(move):
+                score += 90000
+
             move_scores.append((score, move))
         
+        # Sắp xếp tất cả nước đi theo điểm số
         move_scores.sort(key=lambda x: x[0], reverse=True)
         return [move for _, move in move_scores]
     

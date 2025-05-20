@@ -78,4 +78,12 @@ class Board:
     
     def __str__(self):
         """Return a string representation of the board."""
-        return str(self.board) 
+        return str(self.board)
+    
+    def get_piece(self, row, col):
+        """Get the piece at the given row and column as a symbol, or None if empty."""
+        square = chess.square(col, 7 - row)  # row 0 = top, row 7 = bottom
+        piece = self.board.piece_at(square)
+        if piece is None:
+            return None
+        return piece.symbol() 

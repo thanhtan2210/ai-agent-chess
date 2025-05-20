@@ -1,5 +1,5 @@
 import chess
-from .pieces import get_piece_value, get_piece_square_value
+from src.game.pieces import get_piece_value, get_piece_square_value
 
 # Piece values for evaluation
 PIECE_VALUES = {
