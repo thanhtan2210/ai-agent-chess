@@ -1,3 +1,5 @@
-from src.game.rules import evaluate_position
+"""Chess game module."""
 
-__all__ = ['evaluate_position'] 
+from .chess_game import ChessGame
+
+__all__ = ['ChessGame'] 

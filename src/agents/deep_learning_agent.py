@@ -5,25 +5,29 @@ import numpy as np
 import chess
 from src.agents.base_agent import BaseAgent
 from src.game.board import Board
+from typing import Optional, Dict, Tuple, List
+from src.game.rules import evaluate_position
 
 class ChessNet(nn.Module):
     def __init__(self):
-        super(ChessNet, self).__init__()
-        # Input: 8x8x12 (6 piece types x 2 colors)
+        super().__init__()
+        # Input: 12 piece types * 64 squares = 768 features
         self.conv1 = nn.Conv2d(12, 64, kernel_size=3, padding=1)
         self.bn1 = nn.BatchNorm2d(64)
         self.conv2 = nn.Conv2d(64, 128, kernel_size=3, padding=1)
         self.bn2 = nn.BatchNorm2d(128)
         self.conv3 = nn.Conv2d(128, 256, kernel_size=3, padding=1)
         self.bn3 = nn.BatchNorm2d(256)
+        
         self.fc1 = nn.Linear(256 * 8 * 8, 1024)
+        self.dropout1 = nn.Dropout(0.3)
         self.fc2 = nn.Linear(1024, 512)
+        self.dropout2 = nn.Dropout(0.3)
         self.fc3 = nn.Linear(512, 1)
         
-        # Initialize weights
-        self._init_weights()
+        self._initialize_weights()
     
-    def _init_weights(self):
+    def _initialize_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -37,101 +41,137 @@ class ChessNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
     
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        x = F.relu(self.bn3(self.conv3(x)))
+        x = torch.relu(self.bn1(self.conv1(x)))
+        x = torch.relu(self.bn2(self.conv2(x)))
+        x = torch.relu(self.bn3(self.conv3(x)))
+        
         x = x.view(-1, 256 * 8 * 8)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = torch.tanh(self.fc3(x))
+        x = torch.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = torch.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.fc3(x)
         return x
 
 class DeepLearningAgent(BaseAgent):
-    def __init__(self, color=chess.WHITE, model_path=None, batch_size=32):
-        super().__init__(color)
-        self.model = ChessNet()
-        if model_path:
-            self.model.load_state_dict(torch.load(model_path))
-        self.model.eval()
-        self.batch_size = batch_size
-        self.move_cache = {}  # Cache for move evaluations
-    
-    def board_to_tensor(self, board):
-        """Convert a chess board to a tensor representation.
+    def __init__(self, color, model_path: Optional[str] = None, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
+        """Initialize the Deep Learning agent.
         
         Args:
-            board: chess.Board object
-            
-        Returns:
-            torch.Tensor: 8x8x12 tensor representing the board state
+            color: chess.WHITE or chess.BLACK
+            model_path: Path to pretrained model weights (optional)
+            device: Device to run the model on ('cuda' or 'cpu')
         """
-        tensor = torch.zeros((8, 8, 12))
+        super().__init__(color)
+        self.device = device
+        self.model = ChessNet().to(device)
+        self.name = "DeepLearning"
         
-        for row in range(8):
-            for col in range(8):
-                square = chess.square(col, 7 - row)  # Convert to chess square index
-                piece = board.piece_at(square)
-                if piece:
-                    # Calculate the channel index based on piece type and color
-                    piece_type = piece.piece_type - 1  # 0-5 for piece types
-                    color_offset = 0 if piece.color == chess.WHITE else 6
-                    channel = piece_type + color_offset
-                    tensor[row, col, channel] = 1
+        if model_path:
+            self.load_model(model_path)
+        else:
+            print("No model path provided. Using untrained model.")
+            
+        self.model.eval()  # Set to evaluation mode
+        print(f"DeepLearningAgent initialized on {device}")
+        
+    def board_to_tensor(self, board: chess.Board) -> torch.Tensor:
+        """Convert chess board to tensor representation."""
+        # Create 12 channels (6 piece types for each color)
+        tensor = torch.zeros(12, 8, 8, device=self.device)
+        
+        # Map pieces to channels
+        piece_to_channel = {
+            chess.PAWN: 0,
+            chess.KNIGHT: 1,
+            chess.BISHOP: 2,
+            chess.ROOK: 3,
+            chess.QUEEN: 4,
+            chess.KING: 5
+        }
+        
+        # Fill tensor with piece positions
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece:
+                rank = square // 8
+                file = square % 8
+                channel = piece_to_channel[piece.piece_type]
+                if piece.color == chess.BLACK:
+                    channel += 6
+                tensor[channel, rank, file] = 1
                 
-        return tensor
-    
-    def evaluate_positions_batch(self, boards):
-        """Evaluate multiple positions in a batch."""
-        tensors = [self.board_to_tensor(board) for board in boards]
-        # Reshape tensors to [batch_size, channels, height, width] format
-        tensors = [t.permute(2, 0, 1).unsqueeze(0) for t in tensors]
-        batch = torch.cat(tensors, dim=0)
+        return tensor.unsqueeze(0)  # Add batch dimension
         
+    def evaluate_position(self, board: chess.Board) -> float:
+        """Evaluate position using neural network."""
         with torch.no_grad():
-            evaluations = self.model(batch)
-            # Ensure we return a list of scores
-            return evaluations.squeeze().tolist() if evaluations.numel() > 1 else [evaluations.item()]
-    
-    def get_move(self, board):
-        legal_moves = list(board.legal_moves)
-        if not legal_moves:
-            return None
-        
-        # Process moves in batches
+            tensor = self.board_to_tensor(board)
+            evaluation = self.model(tensor).item()
+            return evaluation if board.turn == self.color else -evaluation
+            
+    def get_move(self, board: chess.Board) -> chess.Move:
+        """Get the best move using neural network evaluation."""
         best_score = float('-inf')
         best_move = None
         
-        for i in range(0, len(legal_moves), self.batch_size):
-            batch_moves = legal_moves[i:i + self.batch_size]
-            batch_boards = []
+        # Evaluate all legal moves
+        for move in board.legal_moves:
+            board.push(move)
+            score = self.evaluate_position(board)
+            board.pop()
             
-            for move in batch_moves:
-                # Check cache first
-                move_key = (move.from_square, move.to_square, move.promotion)
-                if move_key in self.move_cache:
-                    score = self.move_cache[move_key]
-                    if score > best_score:
-                        best_score = score
-                        best_move = move
-                    continue
+            if score > best_score:
+                best_score = score
+                best_move = move
                 
-                # Make move and evaluate
-                board.push(move)
-                batch_boards.append(board.copy())
-                board.pop()
+        if best_move is None:
+            # Fallback to first legal move if no evaluation
+            best_move = next(iter(board.legal_moves))
             
-            if batch_boards:
-                scores = self.evaluate_positions_batch(batch_boards)
-                
-                for move, score in zip(batch_moves, scores):
-                    move_key = (move.from_square, move.to_square, move.promotion)
-                    self.move_cache[move_key] = score
-                    
-                    if score > best_score:
-                        best_score = score
-                        best_move = move
-        
+        self.set_best_move(best_move)
         return best_move
-    
+        
+    def save_model(self, path: str):
+        """Save model weights to file."""
+        torch.save(self.model.state_dict(), path)
+        print(f"Model saved to {path}")
+        
+    def load_model(self, path: str):
+        """Load model weights from file."""
+        try:
+            self.model.load_state_dict(torch.load(path, map_location=self.device))
+            print(f"Model loaded from {path}")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            
     def get_name(self):
-        return f"{super().get_name()}(batch_size={self.batch_size})" 
+        """Get the name of the agent with its parameters."""
+        return f"{self.name}(device={self.device})"
+        
+    def train_step(self, board: chess.Board, target_score: float, learning_rate: float = 0.001):
+        """Perform one training step on a position.
+        
+        Args:
+            board: Chess board position
+            target_score: Target evaluation score (-1 to 1)
+            learning_rate: Learning rate for optimization
+        """
+        self.model.train()  # Set to training mode
+        
+        # Convert board to tensor
+        input_tensor = self.board_to_tensor(board)
+        target_tensor = torch.tensor([target_score], device=self.device)
+        
+        # Forward pass
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        optimizer.zero_grad()
+        
+        output = self.model(input_tensor)
+        loss = F.mse_loss(output, target_tensor)
+        
+        # Backward pass
+        loss.backward()
+        optimizer.step()
+        
+        return loss.item() 

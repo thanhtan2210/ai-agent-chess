@@ -1,121 +1,156 @@
-# Window Configuration
-WINDOW_TITLE = "AI Chess Game"
-WINDOW_SIZE = (1024, 768)  # Width, Height
-WINDOW_BG = (40, 44, 52)
+import pygame
 
-# Board Configuration 
-BOARD_SIZE = 600
-BOARD_OFFSET_X = 50  # Left padding
-BOARD_OFFSET_Y = 50  # Top padding
+# Window Configuration
+pygame.init()
+info = pygame.display.Info()
+WINDOW_WIDTH = 1280  # Fixed width cho layout ổn định
+WINDOW_HEIGHT = 800  # Fixed height cho layout ổn định
+WINDOW_TITLE = "AI Chess Game"
+WINDOW_SIZE = (WINDOW_WIDTH, WINDOW_HEIGHT)
+
+# Layout Configuration
+SIDE_PANEL_WIDTH = 340  # Chiều rộng sidebar như chess.com
+MARGIN = 28  # Khoảng lề phù hợp
+
+# Board Configuration
+BOARD_SIZE = min(
+    WINDOW_HEIGHT - 2 * MARGIN,
+    WINDOW_WIDTH - SIDE_PANEL_WIDTH - 2 * MARGIN
+)
+BOARD_OFFSET_X = MARGIN  # Sát lề trái
+BOARD_OFFSET_Y = (WINDOW_HEIGHT - BOARD_SIZE) // 2  # Căn giữa dọc
 SQUARE_SIZE = BOARD_SIZE // 8
 
-# Colors
+# Colors - Chess.com theme
 COLORS = {
-    'background': (40, 44, 52),
-    'light_square': (238, 238, 210),  # Light cream
-    'dark_square': (118, 150, 86),    # Forest green
-    'highlight': (186, 202, 68),      # Move highlight
-    'selected': (246, 246, 105),      # Selected piece
-    'valid_move': (119, 199, 149),    # Valid move indicator
-    'last_move': (205, 210, 106),     # Last move highlight
-    'check': (219, 83, 83)           # Check highlight
+    'background': (22, 22, 22),         # Nền tối như chess.com
+    'light_square': (238, 238, 210),    # Ô trắng hơi ngả kem
+    'dark_square': (125, 146, 98),      # Ô xanh lá nhạt như chess.com
+    'highlight': (255, 255, 102, 200),  # Màu highlight vàng rõ hơn
+    'selected': (255, 252, 153, 220),   # Màu chọn vàng nhạt
+    'valid_move': (119, 151, 86, 180),  # Điểm xanh cho nước đi hợp lệ
+    'last_move': (205, 210, 106, 160),  # Highlight nước đi cuối
+    'check': (232, 88, 86, 200),        # Đỏ cho tình huống chiếu
+    'hover': (255, 255, 255, 25),       # Hover tinh tế hơn
+    'shadow': (0, 0, 0, 40),            # Bóng đổ rõ hơn
+    'sidebar_bg': (32, 32, 32),         # Nền sidebar tối
+    'sidebar_border': (45, 45, 45),     # Viền tinh tế
+    'text_primary': (255, 255, 255),    # Text chính màu trắng
+    'text_secondary': (170, 170, 170),  # Text phụ màu xám
+    'button_bg': (73, 89, 52),          # Nút xanh tối hơn
+    'button_hover': (92, 111, 66),      # Hover xanh sáng
+    'button_active': (61, 74, 44),      # Active xanh tối
+    'piece_white': (255, 255, 255),     # Quân trắng
+    'piece_black': (0, 0, 0),           # Quân đen
+    'promotion_bg': (0, 0, 0, 180),     # Nền hộp thoại phong cấp
+    'time_warning': (255, 81, 81)       # Cảnh báo hết thời gian
 }
 
-# UI Elements
+# Animation Configuration - Match chess.com's smooth animations
+ANIMATION = {
+    'move_duration': 180,        # Thời gian di chuyển quân dài hơn
+    'fade_duration': 150,        # Fade nhanh hơn
+    'hover_scale': 1.05,        # Scale nhỏ hơn để tinh tế
+    'promotion_duration': 200,   # Animation phong cấp
+    'check_pulse_duration': 800, # Hiệu ứng nhấp nháy khi chiếu
+    'capture_duration': 250,     # Hiệu ứng bắt quân
+    'easing': {
+        'move': 'easeOutQuint',      # Di chuyển mượt mà
+        'hover': 'easeOutCubic',     # Hover mềm mại
+        'bounce': 'easeOutElastic',  # Cho hiệu ứng bật
+        'pulse': 'easeInOutSine'     # Cho hiệu ứng nhấp nháy
+    },
+    'bounce_height': 3
+}
+
+# Font Configuration
 FONTS = {
     'default': 'Arial',
-    'chess': 'Chess7',  # For chess symbols
+    'title': 'Arial Black',
+    'chess': 'DejaVu Sans',
+    'piece': 'DejaVuSans'
 }
 
+# Font sizes for different text elements
 FONT_SIZES = {
-    'large': 32,
-    'medium': 24,
-    'small': 16,
-    'tiny': 12
+    'title': 48,
+    'large': 36,
+    'medium': 28,
+    'small': 20,
+    'tiny': 16
 }
 
-# Button Configuration
-BUTTON_COLOR = (70, 136, 241)
-BUTTON_HOVER_COLOR = (60, 116, 221)
-BUTTON_TEXT_COLOR = (255, 255, 255)
-BUTTON_BORDER_COLOR = (50, 106, 201)  # Slightly darker than button color
-BUTTON_STYLES = {
-    'default': {
-        'bg_color': BUTTON_COLOR,
-        'hover_color': BUTTON_HOVER_COLOR,
-        'text_color': BUTTON_TEXT_COLOR,
-        'border_color': BUTTON_BORDER_COLOR,
-        'padding': 10,
-        'border_radius': 5,
-        'width': 160,
-        'height': 40
-    },
-    'small': {
-        'bg_color': BUTTON_COLOR,
-        'hover_color': BUTTON_HOVER_COLOR,
-        'text_color': BUTTON_TEXT_COLOR,
-        'border_color': BUTTON_BORDER_COLOR,
-        'padding': 5,
-        'border_radius': 3,
-        'width': 100,
-        'height': 30
-    }
+# Board coordinate styling
+COORDINATES = {
+    'font': 'Arial',
+    'size': 14,
+    'color': (180, 180, 180),
+    'margin': 4
 }
 
-# Side Panel Configuration
-SIDE_PANEL_WIDTH = 300
-PANEL = {
-    'width': SIDE_PANEL_WIDTH,
-    'padding': 20,
-    'bg_color': (45, 49, 58),
-    'text_color': (200, 200, 200),
-    'border_color': (60, 65, 75),
-    'hover_color': (55, 59, 68)
+# UI element styling
+UI_STYLE = {
+    'button_padding': 12,
+    'button_radius': 6,
+    'panel_radius': 8,
+    'shadow_offset': 2,
+    'border_width': 1
 }
 
-# Animation Configuration
-ANIMATIONS = {
-    'move_duration': 0.2,
-    'fade_duration': 0.3,
-    'popup_duration': 0.5
+# Sound settings
+SOUNDS = {
+    'move': 'src/ui/sounds/move.wav',
+    'capture': 'src/ui/sounds/capture.wav',
+    'check': 'src/ui/sounds/check.wav',
+    'game_start': 'src/ui/sounds/game-start.wav',
+    'game_end': 'src/ui/sounds/game-end.wav',
+    'promote': 'src/ui/sounds/promote.wav'
 }
 
-# Game Info Display
-INFO_DISPLAY = {
-    'height': 100,
+# Button styles
+BUTTON_STYLE = {
+    'width': SIDE_PANEL_WIDTH - 40,
+    'height': 40,
+    'margin': 10,
+    'radius': 5,
+    'font_size': 18
+}
+
+# Dialog styles
+DIALOG_STYLE = {
+    'width': 300,
+    'height': 200,
+    'background': (255, 255, 255),
+    'border': (200, 200, 200),
+    'radius': 10,
+    'padding': 20
+}
+
+# Move list styles
+MOVE_LIST_STYLE = {
+    'max_moves': 10,
+    'font_size': 14,
+    'line_height': 20,
+    'padding': 5
+}
+
+# Player info styles
+PLAYER_INFO_STYLE = {
+    'height': 60,
     'padding': 10,
-    'bg_color': (45, 49, 58),
-    'text_color': (200, 200, 200),
-    'border_color': (60, 65, 75)
+    'font_size': 16,
+    'rating_font_size': 14
 }
 
-# Piece Configuration
-PIECE_STYLES = {
-    'default': {
-        'scale': 0.9,  # Piece size relative to square
-        'shadow': True,
-        'shadow_offset': (2, 2)
-    }
-}
-
-# Clock Configuration
-CLOCK = {
-    'bg_color': (45, 49, 58),
-    'text_color': (200, 200, 200),
-    'warning_color': (219, 83, 83),
-    'height': 60,
-    'width': 120
-}
-
-# Menu Configuration
-MENU = {
-    'width': 400,
-    'height': 60,
-    'button_height': 50,
-    'button_width': 200,
-    'button_margin': 10,
-    'bg_color': (45, 49, 58),
-    'border_color': (60, 65, 75),
-    'text_color': (200, 200, 200),
-    'hover_color': (55, 59, 68)
+# Settings styles
+SETTINGS_STYLE = {
+    'width': 300,
+    'height': 400,
+    'background': (255, 255, 255),
+    'border': (200, 200, 200),
+    'radius': 10,
+    'padding': 20,
+    'checkbox_size': 20,
+    'slider_width': 200,
+    'slider_height': 10
 }

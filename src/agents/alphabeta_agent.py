@@ -7,363 +7,377 @@ from src.agents.minimax_agent import MinimaxAgent
 DEBUG_LOG = True # Set to False to disable logs, enable for debugging
 # DEBUG_LOG = False # Temporarily disable for cleaner test runs if needed
 
+# Piece-square tables for positional evaluation
+PAWN_TABLE = [
+    0,  0,  0,  0,  0,  0,  0,  0,
+    50, 50, 50, 50, 50, 50, 50, 50,
+    10, 10, 20, 30, 30, 20, 10, 10,
+    5,  5, 10, 25, 25, 10,  5,  5,
+    0,  0,  0, 20, 20,  0,  0,  0,
+    5, -5,-10,  0,  0,-10, -5,  5,
+    5, 10, 10,-20,-20, 10, 10,  5,
+    0,  0,  0,  0,  0,  0,  0,  0
+]
+
+KNIGHT_TABLE = [
+    -50,-40,-30,-30,-30,-30,-40,-50,
+    -40,-20,  0,  0,  0,  0,-20,-40,
+    -30,  0, 10, 15, 15, 10,  0,-30,
+    -30,  5, 15, 20, 20, 15,  5,-30,
+    -30,  0, 15, 20, 20, 15,  0,-30,
+    -30,  5, 10, 15, 15, 10,  5,-30,
+    -40,-20,  0,  5,  5,  0,-20,-40,
+    -50,-40,-30,-30,-30,-30,-40,-50
+]
+
+BISHOP_TABLE = [
+    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -10,  5,  5, 10, 10,  5,  5,-10,
+    -10,  0, 10, 10, 10, 10,  0,-10,
+    -10, 10, 10, 10, 10, 10, 10,-10,
+    -10,  5,  0,  0,  0,  0,  5,-10,
+    -20,-10,-10,-10,-10,-10,-10,-20
+]
+
+ROOK_TABLE = [
+    0,  0,  0,  0,  0,  0,  0,  0,
+    5, 10, 10, 10, 10, 10, 10,  5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    -5,  0,  0,  0,  0,  0,  0, -5,
+    0,  0,  0,  5,  5,  0,  0,  0
+]
+
+QUEEN_TABLE = [
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -10,  0,  5,  5,  5,  5,  0,-10,
+    -5,  0,  5,  5,  5,  5,  0, -5,
+    0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20
+]
+
+KING_TABLE = [
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -20,-30,-30,-40,-40,-30,-30,-20,
+    -10,-20,-20,-20,-20,-20,-20,-10,
+    20, 20,  0,  0,  0,  0, 20, 20,
+    20, 30, 10,  0,  0, 10, 30, 20
+]
+
 class AlphaBetaAgent(MinimaxAgent):
-    def __init__(self, color, depth=5, time_limit=5.0):
-        """Initialize the Alpha-Beta agent.
+    def __init__(self, color, depth=5, time_limit=20.0):
+        """Initialize the AlphaBeta agent.
         
         Args:
-            color: chess.WHITE or chess.BLACK
-            depth: Maximum search depth
-            time_limit: Maximum time to search in seconds
+            color: The color of the agent (chess.WHITE or chess.BLACK)
+            depth: The maximum search depth (default: 5)
+            time_limit: The maximum time to search in seconds (default: 20.0)
         """
-        super().__init__(color, max_depth=depth, time_limit=time_limit)
-        self.name = "AlphaBeta"
-        self.pv_table = {}  # Principal Variation table
-        self.move_history = {}  # Move history for move ordering
+        super().__init__(color)
+        self.depth = depth
+        self.time_limit = time_limit
+        self.pv_table = {}  # Principal variation table
+        self.history_table = {}  # History heuristic table
+        self.killer_moves = [[None, None] for _ in range(100)]  # Killer moves for each ply
         if DEBUG_LOG: print(f"AlphaBetaAgent initialized. Max Depth: {depth}, Time Limit: {time_limit}")
     
-    def _minimax(self, board, depth, alpha, beta, maximizing_player):
-        """Principal Variation Search implementation of minimax."""
-        if time.time() - self.start_time > self.time_limit:
-            return 0, None
+    def get_move(self, board):
+        """Get the best move using iterative deepening with alpha-beta pruning.
+        
+        Args:
+            board: The current chess board state
             
-        # Check transposition table
-        board_hash = hash(board._transposition_key())
-        stored_eval = self.transposition_table.get(board_hash, depth, alpha, beta)
-        if stored_eval is not None:
-            return stored_eval, None
+        Returns:
+            The best move found
+        """
+        start_time = time.time()
+        best_move = None
+        best_score = float('-inf')
+        alpha = float('-inf')
+        beta = float('inf')
+        self.set_best_move(None)  # Reset best move trước khi tìm
         
-        if depth == 0 or board.is_game_over():
-            self.nodes_evaluated += 1
-            eval_score = self.quiescence_search(board, alpha, beta, 0)
-            self.transposition_table.store(board_hash, depth, eval_score, 0)
-            return eval_score, None
-        
-        # Null Move Pruning
-        R = 3 if depth >= 4 else 2  # Tăng R cho độ sâu lớn hơn
-        if depth >= 3 and not board.is_check() and not board.is_variant_end() and not maximizing_player:
-            board.push(chess.Move.null())
-            try:
-                null_eval, _ = self._minimax(board, depth - 1 - R, -beta, -beta + 1, not maximizing_player)
-            finally:
-                board.pop()
-            null_eval = -null_eval
-            if null_eval >= beta:
-                return beta, None
-        
-        moves = self._order_moves(board, depth)
-        best_move = moves[0] if moves else None
-        best_eval = float('-inf') if maximizing_player else float('inf')
-        
-        # Principal Variation Search
-        for i, move in enumerate(moves):
-            board.push(move)
-            try:
-                if i == 0:  # First move - full window search
-                    current_eval, _ = self._minimax(board, depth - 1, -beta, -alpha, not maximizing_player)
-                else:  # Other moves - zero window search
-                    current_eval, _ = self._minimax(board, depth - 1, -(alpha + 1), -alpha, not maximizing_player)
-                    if alpha < current_eval < beta:  # Re-search with full window
-                        current_eval, _ = self._minimax(board, depth - 1, -beta, -alpha, not maximizing_player)
-                current_eval = -current_eval
-            finally:
-                board.pop()
-            
-            if maximizing_player:
-                if current_eval > best_eval:
-                    best_eval = current_eval
-                    best_move = move
-                    # Update PV table
-                    self.pv_table[board_hash] = move
-                alpha = max(alpha, best_eval)
-            else:
-                if current_eval < best_eval:
-                    best_eval = current_eval
-                    best_move = move
-                    # Update PV table
-                    self.pv_table[board_hash] = move
-                beta = min(beta, best_eval)
-            
-            if beta <= alpha:
-                # Cập nhật history heuristic cho beta cutoff
-                move_key = (move.from_square, move.to_square, move.promotion)
-                self.move_history[move_key] = self.move_history.get(move_key, 0) + depth * depth
+        # Iterative deepening
+        for current_depth in range(1, self.depth + 1):
+            if time.time() - start_time > self.time_limit:
                 break
-        
-        # Store result in transposition table
-        tt_flag = 0
-        if best_eval <= alpha:
-            tt_flag = 2  # UPPERBOUND
-        elif best_eval >= beta:
-            tt_flag = 1  # LOWERBOUND
-        self.transposition_table.store(board_hash, depth, best_eval, tt_flag)
-        
-        return best_eval, best_move
+                
+            print(f"Iterative Deepening - Current Depth: {current_depth}")
+            
+            # Get all legal moves
+            moves = list(board.legal_moves)
+            if not moves:
+                return None
+                
+            # Order moves
+            ordered_moves = self._order_moves(board, moves, current_depth)
+            
+            # Search each move
+            for move in ordered_moves:
+                board.push(move)
+                score = -self._minimax(board, current_depth - 1, -beta, -alpha, False, start_time)
+                board.pop()
+                
+                if score > best_score:
+                    best_score = score
+                    best_move = move
+                    self.set_best_move(best_move)  # Lưu best move tạm thời
+                
+                alpha = max(alpha, best_score)
+                if alpha >= beta:
+                    break
+                    
+            # Update PV table
+            if best_move:
+                self.pv_table[board.fen()] = best_move
+                
+        # Nếu hết thời gian hoặc không tìm được move ở depth cuối, trả về best_move đã lưu
+        if self.get_best_move() is not None:
+            print(f"AlphaBeta selected move: {self.get_best_move()} with eval: {best_score} from FEN: {board.fen()}")
+            return self.get_best_move()
+        else:
+            print("No best move found by minimax, selecting first legal move.")
+            return list(board.legal_moves)[0]
     
-    def _order_moves(self, board, depth=0):
-        """Enhanced move ordering with PV table and history heuristic."""
+    def _minimax(self, board, depth, alpha, beta, maximizing, start_time):
+        """Minimax algorithm with alpha-beta pruning.
+        
+        Args:
+            board: The current chess board state
+            depth: The remaining search depth
+            alpha: The alpha value for pruning
+            beta: The beta value for pruning
+            maximizing: Whether we're maximizing or minimizing
+            start_time: The start time of the search
+            
+        Returns:
+            The evaluation score
+        """
+        # Check time limit
+        if time.time() - start_time > self.time_limit:
+            return 0
+            
+        # Check for terminal states
+        if board.is_game_over():
+            if board.is_checkmate():
+                return -10000 if maximizing else 10000
+            return 0
+            
+        # Check for draw by repetition or insufficient material
+        if board.is_repetition() or board.is_insufficient_material():
+            return 0
+            
+        # Check for maximum depth
+        if depth == 0:
+            return self.evaluate(board)
+            
+        # Get all legal moves
         moves = list(board.legal_moves)
+        if not moves:
+            return 0
+            
+        # Order moves
+        ordered_moves = self._order_moves(board, moves, depth)
+        
+        if maximizing:
+            max_eval = float('-inf')
+            for move in ordered_moves:
+                board.push(move)
+                eval = self._minimax(board, depth - 1, alpha, beta, False, start_time)
+                board.pop()
+                max_eval = max(max_eval, eval)
+                alpha = max(alpha, eval)
+                if beta <= alpha:
+                    break
+            return max_eval
+        else:
+            min_eval = float('inf')
+            for move in ordered_moves:
+                board.push(move)
+                eval = self._minimax(board, depth - 1, alpha, beta, True, start_time)
+                board.pop()
+                min_eval = min(min_eval, eval)
+                beta = min(beta, eval)
+                if beta <= alpha:
+                    break
+            return min_eval
+            
+    def _order_moves(self, board, moves, depth):
+        """Order moves to improve alpha-beta pruning efficiency.
+        
+        Args:
+            board: The current chess board state
+            moves: List of legal moves
+            depth: The current search depth
+            
+        Returns:
+            Ordered list of moves
+        """
         move_scores = []
-        board_hash = hash(board._transposition_key())
-        
-        # Get PV move if available
-        pv_move = self.pv_table.get(board_hash)
-        
-        # Tạo danh sách các nước đi theo loại
-        captures = []
-        checks = []
-        normal_moves = []
         
         for move in moves:
-            # PV move gets highest priority
-            if move == pv_move:
-                move_scores.append((1000000, move))
-                continue
-                
-            # Phân loại nước đi
+            score = 0
+            
+            # 1. Principal Variation (PV) moves
+            if board.fen() in self.pv_table and move == self.pv_table[board.fen()]:
+                score += 10000
+            
+            # 2. Captures with MVV-LVA (Most Valuable Victim - Least Valuable Attacker)
             if board.is_capture(move):
-                captures.append(move)
-            else:
-                board.push(move)
-                if board.is_check():
-                    checks.append(move)
-                else:
-                    normal_moves.append(move)
-                board.pop()
-
-        # Sắp xếp captures theo MVV-LVA
-        for move in captures:
-            score = 0
-            piece = board.piece_at(move.from_square)
-            victim = board.piece_at(move.to_square)
+                victim = board.piece_at(move.to_square)
+                attacker = board.piece_at(move.from_square)
+                if victim and attacker:
+                    # MVV-LVA scoring: victim_value * 10 - attacker_value
+                    victim_value = self._get_piece_value(victim)
+                    attacker_value = self._get_piece_value(attacker)
+                    score += 8000 + (victim_value * 10 - attacker_value)
             
-            if board.is_en_passant(move):
-                victim_value = PIECE_VALUES[chess.PAWN]
-            elif victim:
-                victim_value = PIECE_VALUES[victim.piece_type]
-            else:
-                victim_value = 0
+            # 3. Killer moves (non-captures that caused a cutoff in the same position)
+            if not board.is_capture(move) and move in self.killer_moves[depth]:
+                score += 7000
             
-            attacker_value = PIECE_VALUES[piece.piece_type]
-            # Tăng độ ưu tiên cho captures
-            score = 200000 + victim_value * 10 - attacker_value
-            
-            # Kiểm tra xem nước đi có an toàn không
-            board.push(move)
-            if board.is_check():
-                score -= 50000  # Giảm điểm cho captures không an toàn
-            board.pop()
-            
-            move_scores.append((score, move))
-
-        # Sắp xếp checks
-        for move in checks:
-            score = 100000
-            # Thêm điểm cho checks có thể gây thiệt hại
-            board.push(move)
-            if board.is_check():
-                # Kiểm tra xem có thể bắt quân sau khi chiếu không
-                for reply in board.legal_moves:
-                    if board.is_capture(reply):
-                        score += 50000
-                        break
-            board.pop()
-            move_scores.append((score, move))
-
-        # Sắp xếp normal moves
-        for move in normal_moves:
-            score = 0
+            # 4. History heuristic
             move_key = (move.from_square, move.to_square, move.promotion)
-            piece = board.piece_at(move.from_square)
-
-            # Killer moves
-            if move in self.killer_moves[depth]:
-                score += 80000
-
-            # History heuristic
-            score += self.move_history.get(move_key, 0)
-
-            # Pawn pushes to center/advanced ranks
-            if piece.piece_type == chess.PAWN:
-                if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
-                    score += 2000
-                if (piece.color == chess.WHITE and chess.square_rank(move.to_square) == 6) or \
-                   (piece.color == chess.BLACK and chess.square_rank(move.to_square) == 1):
-                    score += 4000
-
-            # Piece development
-            if piece.piece_type in [chess.KNIGHT, chess.BISHOP]:
-                if move.to_square in [chess.D4, chess.E4, chess.D5, chess.E5]:
-                    score += 1600
-                if (piece.color == chess.WHITE and chess.square_rank(move.from_square) == 0) or \
-                     (piece.color == chess.BLACK and chess.square_rank(move.from_square) == 7):
-                    score += 1200
-
-            # Castling
-            if board.is_castling(move):
-                score += 90000
-
-            # Kiểm tra an toàn của nước đi
+            if move_key in self.history_table:
+                score += self.history_table[move_key]
+            
+            # 5. Checks
             board.push(move)
             if board.is_check():
-                score -= 30000  # Giảm điểm cho nước đi không an toàn
+                score += 6000
+                # Bonus for discovered checks
+                if not board.is_attacked_by(board.turn, move.from_square):
+                    score += 500
             board.pop()
-
-            move_scores.append((score, move))
+            
+            # 6. Promotions
+            if move.promotion:
+                score += 5000 + self._get_piece_value(chess.Piece(move.promotion, board.turn))
+            
+            # 7. Center control
+            center_squares = [chess.E4, chess.D4, chess.E5, chess.D5]
+            if move.to_square in center_squares:
+                score += 100
+            
+            # 8. Pawn advancement
+            if board.piece_at(move.from_square) and board.piece_at(move.from_square).piece_type == chess.PAWN:
+                if board.turn == chess.WHITE:
+                    score += chess.square_rank(move.to_square) * 10
+                else:
+                    score += (7 - chess.square_rank(move.to_square)) * 10
+            
+            # 9. Castling
+            if board.is_castling(move):
+                score += 3000
+            
+            # 10. Avoid moving pieces multiple times in opening
+            if depth > 2:  # Only in early game
+                if board.piece_at(move.from_square):
+                    piece = board.piece_at(move.from_square)
+                    if piece.piece_type != chess.PAWN and piece.piece_type != chess.KING:
+                        # Check if piece has moved before
+                        if board.is_attacked_by(not board.turn, move.from_square):
+                            score -= 200  # Penalize moving pieces that are under attack
+            
+            move_scores.append((move, score))
         
-        # Sắp xếp tất cả nước đi theo điểm số
-        move_scores.sort(key=lambda x: x[0], reverse=True)
-        return [move for _, move in move_scores]
-    
-    def get_name(self):
-        """Get the name of the agent with its parameters."""
-        return f"{self.name}(depth={self.max_depth}, time={self.time_limit}s)"
-
+        # Sort moves by score
+        move_scores.sort(key=lambda x: x[1], reverse=True)
+        
+        # Update history table for non-captures
+        for move, score in move_scores:
+            if not board.is_capture(move):
+                move_key = (move.from_square, move.to_square, move.promotion)
+                self.history_table[move_key] = self.history_table.get(move_key, 0) + 2 ** depth
+        
+        return [move for move, _ in move_scores]
+        
+    def _get_piece_value(self, piece):
+        """Get the value of a piece.
+        
+        Args:
+            piece: The chess piece
+            
+        Returns:
+            The piece value
+        """
+        if piece is None:
+            return 0
+            
+        values = {
+            chess.PAWN: 1,
+            chess.KNIGHT: 3,
+            chess.BISHOP: 3,
+            chess.ROOK: 5,
+            chess.QUEEN: 9,
+            chess.KING: 100
+        }
+        return values[piece.piece_type]
+        
     def evaluate(self, board):
-        """Enhanced evaluation function with piece-square tables and mobility."""
+        """Evaluate the current board position.
+        
+        Args:
+            board: The current chess board state
+            
+        Returns:
+            The evaluation score
+        """
+        # Check for terminal states
         if board.is_game_over():
             if board.is_checkmate():
                 return -10000 if board.turn == self.color else 10000
-            return 0  # Draw
-        
-        # Material evaluation with piece-square tables
+            return 0
+            
+        # Check for draw by repetition or insufficient material
+        if board.is_repetition() or board.is_insufficient_material():
+            return 0
+            
+        # Material score
         material_score = 0
-        mobility_score = 0
-        
-        # Piece-square tables for positional evaluation
-        pawn_table = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            50, 50, 50, 50, 50, 50, 50, 50,
-            10, 10, 20, 30, 30, 20, 10, 10,
-            5,  5, 10, 25, 25, 10,  5,  5,
-            0,  0,  0, 20, 20,  0,  0,  0,
-            5, -5,-10,  0,  0,-10, -5,  5,
-            5, 10, 10,-20,-20, 10, 10,  5,
-            0,  0,  0,  0,  0,  0,  0,  0
-        ]
-        
-        knight_table = [
-            -50,-40,-30,-30,-30,-30,-40,-50,
-            -40,-20,  0,  0,  0,  0,-20,-40,
-            -30,  0, 10, 15, 15, 10,  0,-30,
-            -30,  5, 15, 20, 20, 15,  5,-30,
-            -30,  0, 15, 20, 20, 15,  0,-30,
-            -30,  5, 10, 15, 15, 10,  5,-30,
-            -40,-20,  0,  5,  5,  0,-20,-40,
-            -50,-40,-30,-30,-30,-30,-40,-50
-        ]
-        
-        bishop_table = [
-            -20,-10,-10,-10,-10,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5, 10, 10,  5,  0,-10,
-            -10,  5,  5, 10, 10,  5,  5,-10,
-            -10,  0, 10, 10, 10, 10,  0,-10,
-            -10, 10, 10, 10, 10, 10, 10,-10,
-            -10,  5,  0,  0,  0,  0,  5,-10,
-            -20,-10,-10,-10,-10,-10,-10,-20
-        ]
-        
-        rook_table = [
-            0,  0,  0,  0,  0,  0,  0,  0,
-            5, 10, 10, 10, 10, 10, 10,  5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            -5,  0,  0,  0,  0,  0,  0, -5,
-            0,  0,  0,  5,  5,  0,  0,  0
-        ]
-        
-        queen_table = [
-            -20,-10,-10, -5, -5,-10,-10,-20,
-            -10,  0,  0,  0,  0,  0,  0,-10,
-            -10,  0,  5,  5,  5,  5,  0,-10,
-            -5,  0,  5,  5,  5,  5,  0, -5,
-            0,  0,  5,  5,  5,  5,  0, -5,
-            -10,  5,  5,  5,  5,  5,  0,-10,
-            -10,  0,  5,  0,  0,  0,  0,-10,
-            -20,-10,-10, -5, -5,-10,-10,-20
-        ]
-        
-        king_table = [
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -30,-40,-40,-50,-50,-40,-40,-30,
-            -20,-30,-30,-40,-40,-30,-30,-20,
-            -10,-20,-20,-20,-20,-20,-20,-10,
-            20, 20,  0,  0,  0,  0, 20, 20,
-            20, 30, 10,  0,  0, 10, 30, 20
-        ]
-        
-        # Evaluate each piece
         for square in chess.SQUARES:
             piece = board.piece_at(square)
             if piece is None:
                 continue
                 
-            # Material value
-            value = PIECE_VALUES[piece.piece_type]
-            
-            # Positional value
-            if piece.color == chess.WHITE:
-                if piece.piece_type == chess.PAWN:
-                    value += pawn_table[square]
-                elif piece.piece_type == chess.KNIGHT:
-                    value += knight_table[square]
-                elif piece.piece_type == chess.BISHOP:
-                    value += bishop_table[square]
-                elif piece.piece_type == chess.ROOK:
-                    value += rook_table[square]
-                elif piece.piece_type == chess.QUEEN:
-                    value += queen_table[square]
-                elif piece.piece_type == chess.KING:
-                    value += king_table[square]
-            else:
-                # Mirror tables for black pieces
-                if piece.piece_type == chess.PAWN:
-                    value += pawn_table[chess.square_mirror(square)]
-                elif piece.piece_type == chess.KNIGHT:
-                    value += knight_table[chess.square_mirror(square)]
-                elif piece.piece_type == chess.BISHOP:
-                    value += bishop_table[chess.square_mirror(square)]
-                elif piece.piece_type == chess.ROOK:
-                    value += rook_table[chess.square_mirror(square)]
-                elif piece.piece_type == chess.QUEEN:
-                    value += queen_table[chess.square_mirror(square)]
-                elif piece.piece_type == chess.KING:
-                    value += king_table[chess.square_mirror(square)]
-            
-            # Add to material score
+            value = self._get_piece_value(piece)
             if piece.color == self.color:
                 material_score += value
             else:
                 material_score -= value
+                
+        # Positional score
+        positional_score = self._evaluate_position(board)
         
-        # Mobility evaluation
-        board.turn = self.color
-        mobility_score += len(list(board.legal_moves))
-        board.turn = not self.color
-        mobility_score -= len(list(board.legal_moves))
+        # Pawn structure score
+        pawn_score = self._evaluate_pawn_structure(board)
         
-        # Pawn structure evaluation
-        pawn_structure_score = self._evaluate_pawn_structure(board)
-        
-        # King safety evaluation
+        # King safety score
         king_safety_score = self._evaluate_king_safety(board)
         
-        # Combine all factors with adjusted weights
-        total_score = material_score + mobility_score * 0.2 + pawn_structure_score * 1.5 + king_safety_score * 1.2
+        # Mobility score
+        mobility_score = self._evaluate_mobility(board)
         
-        # Penalize for being in check
-        if board.is_check():
-            if board.turn == self.color:
-                total_score -= 50
-            else:
-                total_score += 50
+        # Combine scores with adjusted weights
+        total_score = (
+            material_score * 1.2 +  # Increased material weight
+            positional_score * 0.4 +  # Increased positional weight
+            pawn_score * 0.3 +  # Increased pawn structure weight
+            king_safety_score * 0.3 +  # Increased king safety weight
+            mobility_score * 0.2  # Increased mobility weight
+        )
         
-        return total_score
+        return total_score if self.color == chess.WHITE else -total_score
         
     def _evaluate_pawn_structure(self, board):
         """Evaluate pawn structure."""
@@ -417,59 +431,167 @@ class AlphaBetaAgent(MinimaxAgent):
         """Evaluate king safety."""
         score = 0
         
-        # Find kings
-        white_king = None
-        black_king = None
-        for square in chess.SQUARES:
-            piece = board.piece_at(square)
-            if piece and piece.piece_type == chess.KING:
-                if piece.color == chess.WHITE:
-                    white_king = square
+        # Count pawns around king
+        for color in [chess.WHITE, chess.BLACK]:
+            king_square = board.king(color)
+            if king_square is not None:
+                king_rank = chess.square_rank(king_square)
+                king_file = chess.square_file(king_square)
+                
+                # Count pawns in front of king
+                pawn_shield = 0
+                for file in range(max(0, king_file - 1), min(7, king_file + 2)):
+                    for rank in range(max(0, king_rank - 1), min(7, king_rank + 2)):
+                        square = chess.square(file, rank)
+                        piece = board.piece_at(square)
+                        if piece and piece.piece_type == chess.PAWN and piece.color == color:
+                            pawn_shield += 1
+                
+                if color == self.color:
+                    score += pawn_shield * 10
                 else:
-                    black_king = square
+                    score -= pawn_shield * 10
         
-        if white_king is None or black_king is None:
-            return 0
+        return score
+
+    def _evaluate_mobility(self, board):
+        """Evaluate piece mobility and control of the center.
         
-        # Evaluate pawn shield
-        def evaluate_pawn_shield(king_square, color):
-            shield_score = 0
-            king_file = chess.square_file(king_square)
-            king_rank = chess.square_rank(king_square)
+        Args:
+            board: The current chess board state
             
-            # Check pawns in front of king
-            for file_offset in [-1, 0, 1]:
-                if 0 <= king_file + file_offset <= 7:
-                    for rank_offset in [1, 2]:
-                        if 0 <= king_rank + rank_offset <= 7:
-                            square = chess.square(king_file + file_offset, king_rank + rank_offset)
-                            piece = board.piece_at(square)
-                            if piece and piece.piece_type == chess.PAWN and piece.color == color:
-                                shield_score += 10
+        Returns:
+            The mobility score
+        """
+        score = 0
         
-        # Evaluate piece attacks near king
-        def evaluate_king_attacks(king_square, color):
-            attack_score = 0
+        # Evaluate mobility for both colors
+        for color in [chess.WHITE, chess.BLACK]:
+            # Store current turn
+            current_turn = board.turn
+            board.turn = color
+            
+            # Count legal moves
+            legal_moves = list(board.legal_moves)
+            mobility = len(legal_moves)
+            
+            # Bonus for center control
+            center_squares = [chess.E4, chess.D4, chess.E5, chess.D5]
+            center_control = sum(1 for move in legal_moves if move.to_square in center_squares)
+            
+            # Bonus for piece development
+            developed_pieces = 0
             for square in chess.SQUARES:
                 piece = board.piece_at(square)
-                if piece and piece.color != color:
-                    # Calculate Manhattan distance to king
-                    piece_file = chess.square_file(square)
-                    piece_rank = chess.square_rank(square)
-                    king_file = chess.square_file(king_square)
-                    king_rank = chess.square_rank(king_square)
-                    distance = abs(piece_file - king_file) + abs(piece_rank - king_rank)
-                    
-                    if distance <= 2:
-                        attack_score += PIECE_VALUES[piece.piece_type] * (3 - distance)
+                if piece and piece.color == color:
+                    if piece.piece_type != chess.PAWN and piece.piece_type != chess.KING:
+                        # Check if piece has moved from starting position
+                        if color == chess.WHITE:
+                            if square not in [chess.A1, chess.B1, chess.C1, chess.D1, chess.E1, chess.F1, chess.G1, chess.H1]:
+                                developed_pieces += 1
+                        else:
+                            if square not in [chess.A8, chess.B8, chess.C8, chess.D8, chess.E8, chess.F8, chess.G8, chess.H8]:
+                                developed_pieces += 1
             
-            return attack_score
+            # Calculate score for this color
+            color_score = (
+                mobility * 0.1 +  # Basic mobility
+                center_control * 0.2 +  # Center control bonus
+                developed_pieces * 0.15  # Development bonus
+            )
+            
+            # Add or subtract based on color
+            if color == self.color:
+                score += color_score
+            else:
+                score -= color_score
+            
+            # Restore original turn
+            board.turn = current_turn
         
-        # Evaluate for both kings
-        white_shield = evaluate_pawn_shield(white_king, chess.WHITE)
-        black_shield = evaluate_pawn_shield(black_king, chess.BLACK)
-        white_attacks = evaluate_king_attacks(white_king, chess.WHITE)
-        black_attacks = evaluate_king_attacks(black_king, chess.BLACK)
+        return score
         
-        score = (white_shield - black_shield) + (black_attacks - white_attacks)
-        return score if self.color == chess.WHITE else -score 
+    def _evaluate_position(self, board):
+        """Evaluate the current position with piece-square tables and additional factors."""
+        if board.is_checkmate():
+            return -10000 if board.turn == self.color else 10000
+        if board.is_stalemate() or board.is_insufficient_material():
+            return 0
+
+        # Material and positional evaluation
+        material_score = 0
+        position_score = 0
+        
+        # Evaluate each piece
+        for square in chess.SQUARES:
+            piece = board.piece_at(square)
+            if piece is None:
+                continue
+                
+            # Material value
+            value = self._get_piece_value(piece)
+            
+            # Positional value
+            if piece.color == chess.WHITE:
+                if piece.piece_type == chess.PAWN:
+                    value += PAWN_TABLE[square]
+                elif piece.piece_type == chess.KNIGHT:
+                    value += KNIGHT_TABLE[square]
+                elif piece.piece_type == chess.BISHOP:
+                    value += BISHOP_TABLE[square]
+                elif piece.piece_type == chess.ROOK:
+                    value += ROOK_TABLE[square]
+                elif piece.piece_type == chess.QUEEN:
+                    value += QUEEN_TABLE[square]
+                elif piece.piece_type == chess.KING:
+                    value += KING_TABLE[square]
+            else:
+                # Mirror tables for black pieces
+                if piece.piece_type == chess.PAWN:
+                    value += PAWN_TABLE[chess.square_mirror(square)]
+                elif piece.piece_type == chess.KNIGHT:
+                    value += KNIGHT_TABLE[chess.square_mirror(square)]
+                elif piece.piece_type == chess.BISHOP:
+                    value += BISHOP_TABLE[chess.square_mirror(square)]
+                elif piece.piece_type == chess.ROOK:
+                    value += ROOK_TABLE[chess.square_mirror(square)]
+                elif piece.piece_type == chess.QUEEN:
+                    value += QUEEN_TABLE[chess.square_mirror(square)]
+                elif piece.piece_type == chess.KING:
+                    value += KING_TABLE[chess.square_mirror(square)]
+            
+            # Add to material score
+            if piece.color == self.color:
+                material_score += value
+            else:
+                material_score -= value
+        
+        # Mobility evaluation
+        mobility_score = 0
+        board.turn = self.color
+        mobility_score += len(list(board.legal_moves))
+        board.turn = not self.color
+        mobility_score -= len(list(board.legal_moves))
+        
+        # Pawn structure evaluation
+        pawn_structure_score = self._evaluate_pawn_structure(board)
+        
+        # King safety evaluation
+        king_safety_score = self._evaluate_king_safety(board)
+        
+        # Combine all factors with adjusted weights
+        total_score = (
+            material_score + 
+            mobility_score * 0.2 + 
+            pawn_structure_score * 1.5 + 
+            king_safety_score * 1.2
+        )
+        
+        # Penalize for being in check
+        if board.is_check():
+            if board.turn == self.color:
+                total_score -= 50
+            else:
+                total_score += 50
+        
+        return total_score 

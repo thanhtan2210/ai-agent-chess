@@ -9,6 +9,13 @@ class BaseAgent(ABC):
             color: chess.WHITE or chess.BLACK
         """
         self.color = color
+        self.last_best_move = None  # Lưu best move tạm thời
+    
+    def set_best_move(self, move):
+        self.last_best_move = move
+    
+    def get_best_move(self):
+        return self.last_best_move
     
     @abstractmethod
     def get_move(self, board):

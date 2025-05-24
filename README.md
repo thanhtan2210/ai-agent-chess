@@ -1,117 +1,104 @@
 # AI Chess Agent
 
-A chess game implementation with multiple AI agents using different search algorithms and machine learning approaches.
+A modern chess game implementation with multiple AI agents using different search algorithms and machine learning approaches. The project features a chess.com-like user interface and a comprehensive evaluation system for comparing agent strengths.
 
 ## Features
 
-- Complete chess game implementation with GUI using Pygame
-- Multiple AI agents with different playing strengths
-- Support for all chess rules including special moves
-- Game features: move history, chess clock, undo/redo
-- Agent evaluation system
-- Deep learning based agent
+### Game Features
+- Modern, minimal UI inspired by chess.com
+- Complete chess rules implementation including special moves
+- Interactive game controls (New Game, Undo, Resign)
+- Move history and captured pieces display
+- Flexible game setup (Player vs AI, AI vs AI)
+- Agent selection for both sides
+- Multiple difficulty levels
 
-## AI Agents
+### AI Agents
+1. **Random Agent** (Rating: ~500 Elo)
+   - Makes random legal moves
+   - Used as baseline for evaluation
+   - Configurable preferences for captures and checks
 
-The project implements several search algorithms and approaches for the chess AI:
+2. **Minimax Agent** (Rating: 500-600 Elo)
+   - Configurable search depth (2-3)
+   - Time-limited search
+   - Material-based evaluation
 
-### 1. Random Agent
-- Makes completely random legal moves
-- Used as a baseline for evaluating other agents
-- Rating: 1-2/10
+3. **MCTS Agent** (Rating: 550-650 Elo)
+   - Monte Carlo Tree Search implementation
+   - Configurable time limit (5s/10s)
+   - UCB1 selection with exploration weight
+   - Efficient board state management
 
-### 2. Minimax Agent
-- Implements the minimax algorithm with configurable depth
-- Uses a simple piece-value evaluation function
-- Performance scales with search depth
-- Rating: 2-4/10 depending on depth
+4. **Deep Learning Agent** (Rating: 600-700 Elo)
+   - Neural network based evaluation
+   - Pre-trained model support
+   - CPU/GPU acceleration
 
-### 3. Alpha-Beta Agent
-- Implements minimax with alpha-beta pruning
-- More efficient than basic minimax
-- Can search deeper in the same time
-- Rating: 3-5/10 depending on depth
-
-### 4. Monte Carlo Tree Search Agent
-- Implements MCTS with UCB1 selection
-- Number of simulations configurable
-- Good balance of exploration and exploitation
-- Rating: 4-6/10 depending on simulation count
-
-### 5. Deep Learning Agent
-- Uses neural networks for move evaluation
-- Trained on chess game data
-- Can learn from experience
-- Rating: 5-7/10 depending on training
-
-## Search Algorithms
-
-### Minimax
-- Complete search of game tree to fixed depth
-- Alternates between maximizing and minimizing players
-- Uses evaluation function at leaf nodes
-- Time complexity: O(b^d) where b is branching factor, d is depth
-
-### Alpha-Beta Pruning
-- Optimization of minimax
-- Prunes branches that cannot affect final decision
-- Reduces time complexity to O(b^(d/2)) in best case
-- Maintains same optimality as minimax
-
-### Monte Carlo Tree Search
-- Four phases: Selection, Expansion, Simulation, Backpropagation
-- Uses UCB1 formula for tree policy
-- Asymptotically converges to minimax
-- Can handle large branching factors well
-- Time complexity depends on number of simulations
-
-### Deep Learning
-- Neural network based evaluation
-- Can learn complex patterns and strategies
-- Requires training data and computational resources
-- Can improve over time with more training
-
-## Evaluation
-
-The project includes an evaluation system that:
-- Rates agents on a 0-10 scale
-- Measures win rates against random agent
-- Considers move time in rating
-- Classifies agents as Beginner/Intermediate/Advanced/Expert
+### Evaluation System
+- True Elo rating system
+- Round-robin tournaments
+- Win rate analysis
+- Move time tracking
+- Strength classification:
+  - 2500+ Elo: Grandmaster
+  - 2000+ Elo: Expert
+  - 1600+ Elo: Advanced
+  - 1200+ Elo: Intermediate
+  - 800+ Elo: Beginner
+  - Below 800: Novice
 
 ## Requirements
 
 - Python 3.8+
-- pygame
-- python-chess
-- numpy
-- tensorflow (for deep learning agent)
+- Dependencies:
+  ```
+  pygame
+  python-chess
+  numpy
+  torch (for deep learning agent)
+  ```
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/ai-agent-chess.git
+cd ai-agent-chess
+```
+
+2. Create and activate virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
 ## Usage
 
-1. Run the main game:
+### Play Chess
 ```bash
 python -m src.main
 ```
 
-2. Train the deep learning model:
-```bash
-python -m src.train_chess_model
-```
-
-3. Evaluate agents:
+### Evaluate Agents
 ```bash
 python -m src.evaluate_agents
 ```
 
-4. Compare agents:
+### Compare Agents
 ```bash
 python -m src.compare_agents
 ```
 
-5. Run tests:
+### Train Deep Learning Model
 ```bash
-python -m pytest tests/
+python -m src.train_chess_model
 ```
 
 ## Project Structure
@@ -122,27 +109,52 @@ src/
 │   ├── base_agent.py
 │   ├── random_agent.py
 │   ├── minimax_agent.py
-│   ├── alpha_beta_agent.py
 │   ├── mcts_agent.py
 │   └── deep_learning_agent.py
 ├── game/            # Core game logic
 ├── ui/              # Pygame interface
+│   ├── game_ui.py
+│   ├── board_ui.py
+│   └── setup_dialog.py
 ├── utils/           # Helper functions
 ├── main.py          # Main game entry
-├── train_chess_model.py # Deep learning model training
-├── evaluate_agents.py # Agent evaluation
-└── compare_agents.py # Agent comparison
-tests/
-├── test_agents.py   # Agent tests
-└── test_promotion.py # Special move tests
+├── evaluate_agents.py
+└── compare_agents.py
 ```
+
+## Development
+
+### Adding New Agents
+1. Create new agent class inheriting from `BaseAgent`
+2. Implement required methods:
+   - `get_move(board)`
+   - `evaluate_position(board)`
+3. Add agent to evaluation suite
+
+### UI Customization
+- Modify `src/ui/config.py` for colors and dimensions
+- Edit `src/ui/game_ui.py` for game interface
+- Update `src/ui/setup_dialog.py` for game setup
 
 ## Future Improvements
 
-- Implement more sophisticated evaluation functions
-- Add opening book support
-- Optimize search algorithms further
-- Add more agent types (e.g., Negamax, Iterative Deepening)
-- Improve UI and add more features
-- Enhance deep learning model with more training data
-- Add reinforcement learning capabilities
+- [ ] Add opening book support
+- [ ] Implement more sophisticated evaluation functions
+- [ ] Add reinforcement learning capabilities
+- [ ] Support for saving/loading games
+- [ ] Network play support
+- [ ] Enhanced UI animations
+- [ ] More agent types (Negamax, Iterative Deepening)
+- [ ] Improved deep learning model
+
+## Contributing
+
+1. Fork the repository
+2. Create feature branch
+3. Commit changes
+4. Push to branch
+5. Create Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
